@@ -121,3 +121,29 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.service }}
+
+  update-config:
+    needs: build-scan-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the config repo
+        uses: actions/checkout@v4
+        with:
+          repository: Thormie-Harshey/ecommerce-gitops-config
+          token: ${{ secrets.CONFIG_REPO_TOKEN }}
+
+      - name: Write the new tag into the staging overlay
+        run: |
+          TAG="sha-${GITHUB_SHA::7}"
+          sed -i "s|newTag: .*|newTag: ${TAG}|" overlays/staging/kustomization.yaml
+          grep newTag overlays/staging/kustomization.yaml
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add overlays/staging/kustomization.yaml
+          git diff --cached --quiet && echo "Tag unchanged, nothing to commit" && exit 0
+          git commit -m "staging: deploy ${GITHUB_SHA::7} from ecommerce-gitops-app"
+          git pull --rebase
+          git push
